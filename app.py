@@ -3,17 +3,18 @@ from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains.retrieval_qa.base import RetrievalQA
-# 또는 단순하게 아래처럼 유지하되 requirements가 정상 설치되면 해결됩니다.
+# 에러가 발생하던 예전 임포트 대신 최신 방식을 사용합니다.
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
 
-# --- 1. 보안 설정 (Streamlit Secrets에서 불러오기) ---
-# 로컬 테스트 시에는 .streamlit/secrets.toml 파일을 만들어 저장하세요.
+# --- 1. 보안 설정 ---
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 ACCESS_PASSWORD = st.secrets["ACCESS_PASSWORD"]
 
 st.set_page_config(page_title="사내 매뉴얼 챗봇", layout="centered")
 
-# --- 2. 간단 로그인 기능 ---
+# --- 2. 로그인 기능 ---
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
@@ -31,13 +32,9 @@ if not st.session_state.auth:
 # --- 3. 매뉴얼 학습 (캐싱) ---
 @st.cache_resource
 def init_rag():
-    # manual.pdf 파일이 루트 디렉토리에 있어야 합니다.
     loader = PyPDFLoader("manual.pdf")
     pages = loader.load_and_split()
-    
-    # 한국어 문장 유사도 측정에 특화된 모델
     embeddings = HuggingFaceEmbeddings(model_name="jhgan/ko-sroberta-multitask")
-    
     vectorstore = FAISS.from_documents(pages, embeddings)
     return vectorstore
 
@@ -49,7 +46,6 @@ except Exception as e:
 
 # --- 4. 채팅 인터페이스 ---
 st.title("🤖 사내 매뉴얼 어시스턴트")
-st.info("매뉴얼 내용을 바탕으로 답변합니다. 질문을 입력해주세요.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -70,17 +66,26 @@ if prompt := st.chat_input("질문을 입력하세요..."):
             temperature=0
         )
         
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=vector_db.as_retriever(search_kwargs={"k": 3})
+        # 최신 방식의 프롬프트 구성
+        system_prompt = (
+            "너는 회사의 매뉴얼 전문가야. "
+            "아래 제공된 문서를 바탕으로 반드시 한국어로 친절하게 답변해줘. "
+            "매뉴얼에 없는 내용이라면 '죄송하지만 해당 내용은 매뉴얼에서 찾을 수 없습니다'라고 답해줘."
+            "\n\n"
+            "{context}"
         )
         
-        # 한국어 답변 유도를 위한 프롬프트 구성
-        sys_prompt = f"너는 회사의 매뉴얼 전문가야. 제공된 문서를 바탕으로 반드시 한국어로 답변해줘. 매뉴얼에 없는 내용이라면 '죄송하지만 해당 내용은 매뉴얼에서 찾을 수 없습니다'라고 답해줘. 질문: {prompt}"
+        prompt_template = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "{input}"),
+        ])
+        
+        # 최신 방식의 RAG 체인 생성
+        question_answer_chain = create_stuff_documents_chain(llm, prompt_template)
+        rag_chain = create_retrieval_chain(vector_db.as_retriever(), question_answer_chain)
         
         with st.spinner("답변을 생성 중입니다..."):
-            response = qa_chain.invoke(sys_prompt)
-            answer = response["result"]
+            response = rag_chain.invoke({"input": prompt})
+            answer = response["answer"]
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
