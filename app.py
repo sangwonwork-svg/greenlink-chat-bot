@@ -3,8 +3,9 @@ from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-# 에러가 발생하던 예전 임포트 대신 최신 방식을 사용합니다.
-from langchain.chains import create_retrieval_chain
+
+# 경로를 더 명확하게 수정했습니다.
+from langchain.chains.retrieval import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 
