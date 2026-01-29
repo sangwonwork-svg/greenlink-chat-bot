@@ -1,8 +1,10 @@
 streamlit
 langchain
-langchain-groq
 langchain-community
+langchain-groq
 langchain-huggingface
 pypdf
 faiss-cpu
 sentence-transformers
+# 아래 패키지를 추가하면 에러 해결에 도움이 됩니다
+langchain-text-splitters
