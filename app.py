@@ -3,7 +3,8 @@ from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains import RetrievalQA
+from langchain.chains.retrieval_qa.base import RetrievalQA
+# 또는 단순하게 아래처럼 유지하되 requirements가 정상 설치되면 해결됩니다.
 
 # --- 1. 보안 설정 (Streamlit Secrets에서 불러오기) ---
 # 로컬 테스트 시에는 .streamlit/secrets.toml 파일을 만들어 저장하세요.
