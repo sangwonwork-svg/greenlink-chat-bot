@@ -6,8 +6,8 @@ from langchain_huggingface import HuggingFaceEmbeddings # 한국어 최적화용
 from langchain.chains import RetrievalQA
 
 # --- 1. 환경 설정 ---
-GROQ_API_KEY = "여기에_Groq_API_키를_입력하세요"
-ACCESS_PASSWORD = "우리끼리비번" # 담당자 3명만 공유할 비번
+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 = "여기에_Groq_API_키를_입력하세요"
+1234 = "우리끼리비번" # 담당자 3명만 공유할 비번
 
 st.set_page_config(page_title="사내 매뉴얼 챗봇", layout="centered")
 
