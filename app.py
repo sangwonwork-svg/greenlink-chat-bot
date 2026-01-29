@@ -1,52 +1,45 @@
 import streamlit as st
-from langchain_groq import ChatGroq
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-
-# 경로를 더 명확하게 수정했습니다.
-from langchain.chains.retrieval import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
+from groq import Groq
+import fitz  # PyMuPDF
 
 # --- 1. 보안 설정 ---
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 ACCESS_PASSWORD = st.secrets["ACCESS_PASSWORD"]
 
-st.set_page_config(page_title="사내 매뉴얼 챗봇", layout="centered")
+st.set_page_config(page_title="매뉴얼 챗봇", layout="centered")
 
 # --- 2. 로그인 기능 ---
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔒 접근 제한")
-    pwd = st.text_input("접속 비밀번호를 입력하세요:", type="password")
+    st.title("🔒 매뉴얼 챗봇 로그인")
+    pwd = st.text_input("비밀번호를 입력하세요:", type="password")
     if st.button("로그인"):
         if pwd == ACCESS_PASSWORD:
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("비밀번호가 올바르지 않습니다.")
+            st.error("비밀번호가 틀렸습니다.")
     st.stop()
 
-# --- 3. 매뉴얼 학습 (캐싱) ---
+# --- 3. PDF 텍스트 추출 ---
 @st.cache_resource
-def init_rag():
-    loader = PyPDFLoader("manual.pdf")
-    pages = loader.load_and_split()
-    embeddings = HuggingFaceEmbeddings(model_name="jhgan/ko-sroberta-multitask")
-    vectorstore = FAISS.from_documents(pages, embeddings)
-    return vectorstore
+def load_manual_text():
+    doc = fitz.open("manual.pdf")
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    return text
 
 try:
-    vector_db = init_rag()
+    manual_content = load_manual_text()
 except Exception as e:
-    st.error(f"매뉴얼 로딩 중 오류 발생: {e}")
+    st.error("manual.pdf 파일을 찾을 수 없습니다. GitHub에 파일을 올려주세요.")
     st.stop()
 
-# --- 4. 채팅 인터페이스 ---
-st.title("🤖 사내 매뉴얼 어시스턴트")
+# --- 4. 챗봇 UI ---
+st.title("🤖 사내 매뉴얼 가이드")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -61,32 +54,28 @@ if prompt := st.chat_input("질문을 입력하세요..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        llm = ChatGroq(
-            groq_api_key=GROQ_API_KEY,
-            model_name="llama-3.3-70b-versatile",
-            temperature=0
-        )
-        
-        # 최신 방식의 프롬프트 구성
-        system_prompt = (
-            "너는 회사의 매뉴얼 전문가야. "
-            "아래 제공된 문서를 바탕으로 반드시 한국어로 친절하게 답변해줘. "
-            "매뉴얼에 없는 내용이라면 '죄송하지만 해당 내용은 매뉴얼에서 찾을 수 없습니다'라고 답해줘."
-            "\n\n"
-            "{context}"
-        )
-        
-        prompt_template = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "{input}"),
-        ])
-        
-        # 최신 방식의 RAG 체인 생성
-        question_answer_chain = create_stuff_documents_chain(llm, prompt_template)
-        rag_chain = create_retrieval_chain(vector_db.as_retriever(), question_answer_chain)
-        
-        with st.spinner("답변을 생성 중입니다..."):
-            response = rag_chain.invoke({"input": prompt})
-            answer = response["answer"]
+        client = Groq(api_key=GROQ_API_KEY)
+
+        # 모델에게 전달할 메시지 구성
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "너는 회사 매뉴얼 전문가야. 제공된 매뉴얼 내용을 바탕으로 답변해줘. "
+                    "반드시 한국어로 친절하게 답변하고, 매뉴얼에 없는 내용은 모른다고 답해줘."
+                    f"\n\n[매뉴얼 내용]\n{manual_content}"
+                )
+            }
+        ]
+        for m in st.session_state.messages[-5:]:
+            messages.append({"role": m["role"], "content": m["content"]})
+
+        with st.spinner("생각 중..."):
+            chat_completion = client.chat.completions.create(
+                messages=messages,
+                model="llama-3.3-70b-versatile",
+                temperature=0.2,
+            )
+            answer = chat_completion.choices[0].message.content
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
