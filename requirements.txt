@@ -1,3 +1,7 @@
 streamlit
 groq
 pymupdf
+python-pptx
+# hwp는 텍스트 추출이 까다로워 olefile을 활용하거나 
+# 텍스트 전용일 경우 간단하게 처리합니다.
+olefile
